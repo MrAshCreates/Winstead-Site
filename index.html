@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#0c0a08" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Winstead" />
+    <title>Winstead Family</title>
+    <style>
+      html, body { margin: 0; min-height: 100%; background: #f3eee6; color: #1a1612; }
+      #root { min-height: 100dvh; }
+    </style>
+    <script>
+      window.addEventListener("error", function (event) {
+        var root = document.getElementById("root");
+        if (!root || root.getAttribute("data-booted") === "1") return;
+        var message = (event.error && (event.error.stack || event.error.message)) || event.message || "Unknown error";
+        root.innerHTML =
+          '<div style="min-height:100dvh;display:grid;place-items:center;padding:24px;background:#f3eee6;color:#1a1612;font-family:system-ui,sans-serif">' +
+          '<div style="max-width:520px"><h1 style="margin:0 0 8px">The house did not open</h1>' +
+          '<pre style="white-space:pre-wrap;color:#6a5f53;font-size:13px"></pre>' +
+          '<p><button type="button" onclick="location.reload()" style="border:0;border-radius:999px;padding:10px 16px;background:#1a1612;color:#f3eee6">Reload</button></p></div></div>';
+        root.querySelector("pre").textContent = String(message);
+      });
+      (function () {
+        try {
+          var prefs = JSON.parse(localStorage.getItem("winstead-prefs") || "{}");
+          var root = document.documentElement;
+          var mode = prefs.mode || "system";
+          var scheme = prefs.scheme || "heritage";
+          var font = prefs.font || "default";
+          var backdrop = prefs.backdrop || "orbs";
+          var transparency = prefs.transparency == null ? 72 : prefs.transparency;
+          var dark =
+            mode === "dark" ||
+            (mode === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches);
+          root.dataset.mode = dark ? "dark" : "light";
+          root.dataset.scheme = scheme;
+          root.dataset.font = font;
+          root.dataset.backdrop = backdrop;
+          var min = 15, max = 90;
+          var t = Math.min(max, Math.max(min, Number(transparency)));
+          var solid = (t - min) / (max - min);
+          var fluid = 1 - solid;
+          root.style.setProperty("--glass-pct", 26 + solid * 66 + "%");
+          root.style.setProperty("--glass-fill", 26 + solid * 66 + "%");
+          root.style.setProperty("--glass-blur", 12 + fluid * 22 + "px");
+          root.style.setProperty("--glass-sat", String(1.08 + fluid * 0.32));
+          root.style.setProperty("--glass-shine", String(0.18 + fluid * 0.38));
+          root.style.setProperty("--glass-radius", 18 + fluid * 12 + "px");
+          root.style.setProperty("--orb-strength", String(0.35 + fluid * 0.5));
+          root.style.setProperty("--read-boost", String(0.2 + solid * 0.55));
+          if (backdrop === "photo" && prefs.backdropKey) {
+            root.style.setProperty("--backdrop-photo", 'url("/api/media/' + encodeURIComponent(prefs.backdropKey) + '")');
+          }
+        } catch (e) {}
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root">
+      <div style="min-height:100dvh;display:grid;place-items:center;padding:24px;background:#f3eee6;color:#1a1612;font-family:system-ui,sans-serif;text-align:center">
+        <div>
+          <div style="font-size:28px;font-weight:700">Winstead</div>
+          <p style="color:#6a5f53;margin:8px 0 0">Opening the house…</p>
+        </div>
+      </div>
+    </div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
