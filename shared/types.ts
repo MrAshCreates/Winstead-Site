@@ -199,6 +199,8 @@ export type MeResponse =
 			status: "unauthenticated";
 			reason: "access" | "dev";
 			allowedDomain: string;
+			accessTokenPresent?: boolean;
+			accessPinned?: boolean;
 	  }
 	| {
 			status: "needs_onboarding";

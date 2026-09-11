@@ -46,7 +46,19 @@ npx wrangler d1 migrations apply winstead-family --remote
 Build / deploy commands for Cloudflare Git:
 
 - **Build:** `npm ci && npm run build`
-- **Deploy:** `npx wrangler deploy` (or the dashboard’s Workers Builds deploy)
+- **Deploy:** `npx wrangler deploy --keep-vars`
+
+Set Access keys in the Worker **Settings → Variables** (do not put them in `wrangler.jsonc`, or Git deploys will blank them):
+
+| Name | Value |
+| --- | --- |
+| `ENVIRONMENT` | `production` |
+| `TEAM_DOMAIN` | `https://<team>.cloudflareaccess.com` |
+| `POLICY_AUD` | Access application AUD |
+| `ALLOWED_EMAIL_DOMAIN` | `winstead.family` |
+| `BOOTSTRAP_ADMIN_EMAIL` | `asher@winstead.family` |
+
+The Worker verifies the Access JWT (`Cf-Access-Jwt-Assertion` or the `CF_Authorization` cookie) on every `/api/*` request. Do not trust the email header alone.
 
 ## Cloudflare Access (email code, 1 hour)
 
@@ -58,18 +70,8 @@ Protect `winstead.family` with a Zero Trust self-hosted Access application (host
 4. Identity: **One-time PIN** (email code)
 5. Policy include rule: **Emails ending in** `winstead.family`
 6. Copy the application **AUD tag** and your team domain (`https://<team>.cloudflareaccess.com`)
-
-Set Worker variables (dashboard or `wrangler secret` / vars):
-
-| Name | Value |
-| --- | --- |
-| `ENVIRONMENT` | `production` |
-| `TEAM_DOMAIN` | `https://<team>.cloudflareaccess.com` |
-| `POLICY_AUD` | Access application AUD |
-| `ALLOWED_EMAIL_DOMAIN` | `winstead.family` |
-| `BOOTSTRAP_ADMIN_EMAIL` | `asher@winstead.family` |
-
-The Worker verifies `Cf-Access-Jwt-Assertion` on every `/api/*` request. Do not trust the email header alone.
+7. Put those on the Worker as `POLICY_AUD` and `TEAM_DOMAIN` (dashboard variables, not `wrangler.jsonc`)
+8. In the Git integration, set the deploy command to `npx wrangler deploy --keep-vars` so later deploys don’t wipe them
 
 ## Roles
 

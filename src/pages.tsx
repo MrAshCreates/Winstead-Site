@@ -44,9 +44,21 @@ export function LoginPage() {
 						<p className="muted">Local only. Production uses Cloudflare Access one-time codes sent to *@{domain}.</p>
 					</form>
 				) : (
-					<p className="muted" style={{ marginTop: 22 }}>
-						This house is locked. Open it through the Cloudflare Access gate and a code will be sent to your @{domain} inbox.
-					</p>
+					<div className="stack" style={{ marginTop: 22 }}>
+						{me?.status === "unauthenticated" && me.accessTokenPresent ? (
+							<p>
+								You made it through the Cloudflare Access gate, but the house still can’t see your family email. Set{" "}
+								<strong>TEAM_DOMAIN</strong> and <strong>POLICY_AUD</strong> on the Worker in Cloudflare, then reload.
+							</p>
+						) : (
+							<p className="muted">
+								This house is locked. Open <strong>winstead.family</strong> through the Cloudflare Access gate and a code will be sent to your @{domain} inbox.
+							</p>
+						)}
+						<button className="btn" type="button" onClick={() => window.location.reload()}>
+							Try again
+						</button>
+					</div>
 				)}
 			</Glass>
 		</div>

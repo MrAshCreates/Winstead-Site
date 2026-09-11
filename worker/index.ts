@@ -15,6 +15,7 @@ import {
 	isDev,
 	isFamilyEmail,
 	normalizeEmail,
+	accessStatus,
 	resolveIdentity,
 	type AccessIdentity,
 } from "./auth";
@@ -198,6 +199,7 @@ app.get("/api/me", async (c) => {
 			status: "unauthenticated",
 			reason: isDev(c.env) ? "dev" : "access",
 			allowedDomain: c.env.ALLOWED_EMAIL_DOMAIN || "winstead.family",
+			...accessStatus(c.req.raw, c.env),
 		});
 	}
 	const user = c.get("user");

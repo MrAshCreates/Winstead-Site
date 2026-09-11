@@ -1,4 +1,4 @@
-import { createRemoteJWKSet, jwtVerify } from "jose";
+import { createRemoteJWKSet, decodeJwt, jwtVerify } from "jose";
 
 const DEV_COOKIE = "winstead_dev_email";
 const ONE_HOUR = 60 * 60;
@@ -64,20 +64,52 @@ export function clearDevEmailCookie(secure: boolean): string {
 	return flags.join("; ");
 }
 
-async function verifyAccessJwt(request: Request, env: Env): Promise<string | null> {
-	const token = request.headers.get("cf-access-jwt-assertion");
-	if (!token || !env.TEAM_DOMAIN || !env.POLICY_AUD) return null;
+function accessToken(request: Request): string | null {
+	return request.headers.get("cf-access-jwt-assertion") || readCookie(request, "CF_Authorization");
+}
 
-	const issuer = env.TEAM_DOMAIN.startsWith("https://")
-		? env.TEAM_DOMAIN
-		: `https://${env.TEAM_DOMAIN}`;
+function familyHost(request: Request, env: Env): boolean {
+	const host = new URL(request.url).hostname.toLowerCase();
+	const domain = allowedDomain(env);
+	return host === domain || host.endsWith(`.${domain}`);
+}
+
+function configuredIssuer(env: Env): string {
+	const raw = (env.TEAM_DOMAIN || "").trim().replace(/\/$/, "");
+	if (!raw) return "";
+	return raw.startsWith("https://") ? raw : `https://${raw}`;
+}
+
+async function verifyAccessJwt(request: Request, env: Env): Promise<string | null> {
+	const token = accessToken(request);
+	if (!token) return null;
+
+	let tokenIss = "";
+	try {
+		const decoded = decodeJwt(token);
+		tokenIss = typeof decoded.iss === "string" ? decoded.iss.replace(/\/$/, "") : "";
+	} catch {
+		return null;
+	}
+
+	const pinnedIss = configuredIssuer(env);
+	const issuer = pinnedIss || tokenIss;
+	if (!issuer) return null;
+	if (pinnedIss && tokenIss && pinnedIss !== tokenIss) return null;
+	if (!pinnedIss && !familyHost(request, env)) return null;
+
+	const audience = (env.POLICY_AUD || "").trim();
 	const JWKS = createRemoteJWKSet(new URL(`${issuer}/cdn-cgi/access/certs`));
-	const { payload } = await jwtVerify(token, JWKS, {
-		issuer,
-		audience: env.POLICY_AUD,
-	});
+	const { payload } = await jwtVerify(token, JWKS, audience ? { issuer, audience } : { issuer });
 	const email = typeof payload.email === "string" ? payload.email : null;
 	return email ? normalizeEmail(email) : null;
+}
+
+export function accessStatus(request: Request, env: Env) {
+	return {
+		accessTokenPresent: Boolean(accessToken(request)),
+		accessPinned: Boolean(configuredIssuer(env) && (env.POLICY_AUD || "").trim()),
+	};
 }
 
 export async function resolveIdentity(
