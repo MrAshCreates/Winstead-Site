@@ -4,7 +4,7 @@
  */
 {
 	"$schema": "node_modules/wrangler/config-schema.json",
-	"name": "winstead-family",
+	"name": "winstead-site",
 	"main": "worker/index.ts",
 	"compatibility_date": "2026-09-10",
 	"compatibility_flags": ["nodejs_compat"],
@@ -30,7 +30,7 @@
 		{
 			"binding": "DB",
 			"database_name": "winstead-family",
-			"database_id": "00000000-0000-0000-0000-000000000001",
+			"database_id": "bec543ba-aa01-4581-a1cf-923b76489143",
 			"migrations_dir": "migrations"
 		}
 	],
