@@ -1,0 +1,17 @@
+{
+	"name": "Winstead Family",
+	"install": "npm ci && ([ -f .dev.vars ] || cp .dev.vars.example .dev.vars) && npm run db:migrate:local",
+	"terminals": [
+		{
+			"name": "dev",
+			"command": "npm run dev",
+			"description": "Vite dev server with the Cloudflare Worker, D1, and R2 (local). Serves the app and /api on http://localhost:5173."
+		}
+	],
+	"ports": [
+		{
+			"name": "web",
+			"port": 5173
+		}
+	]
+}
