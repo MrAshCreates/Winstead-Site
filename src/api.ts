@@ -4,6 +4,8 @@ import type {
 	GalleryItem,
 	MeResponse,
 	Member,
+	NotificationPrefs,
+	NotificationStatus,
 	Post,
 	Preferences,
 	Recipe,
@@ -102,6 +104,14 @@ export const api = {
 			body: JSON.stringify(body),
 		}),
 	hardDelete: (type: string, id: string) => request<{ ok: boolean }>(`/api/admin/${type}/${id}`, { method: "DELETE" }),
+	notifications: () => request<NotificationStatus>("/api/notifications"),
+	saveNotificationPrefs: (body: Partial<NotificationPrefs>) =>
+		request<{ preferences: NotificationPrefs }>("/api/notifications/preferences", { method: "PATCH", body: JSON.stringify(body) }),
+	pushSubscribe: (body: { endpoint: string; keys: { p256dh: string; auth: string } }) =>
+		request<{ ok: boolean; subscribed: boolean }>("/api/notifications/subscribe", { method: "POST", body: JSON.stringify(body) }),
+	pushUnsubscribe: (endpoint: string) =>
+		request<{ ok: boolean; subscribed: boolean }>("/api/notifications/unsubscribe", { method: "POST", body: JSON.stringify({ endpoint }) }),
+	pushTest: () => request<{ ok: boolean }>("/api/notifications/test", { method: "POST" }),
 	upload: async (file: File) => {
 		const form = new FormData();
 		form.set("file", file);

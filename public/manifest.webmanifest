@@ -1,0 +1,25 @@
+{
+  "id": "https://winstead.family/",
+  "name": "Winstead Family",
+  "short_name": "Winstead",
+  "description": "The Winstead family home.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f3eee6",
+  "theme_color": "#0c0a08",
+  "icons": [
+    {
+      "src": "/apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png"
+    },
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

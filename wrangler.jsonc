@@ -22,7 +22,12 @@
 	"vars": {
 		"ENVIRONMENT": "production",
 		"ALLOWED_EMAIL_DOMAIN": "winstead.family",
-		"BOOTSTRAP_ADMIN_EMAIL": "asher@winstead.family"
+		"BOOTSTRAP_ADMIN_EMAIL": "asher@winstead.family",
+		"VAPID_PUBLIC_KEY": "BOKWX9FNCkkF6Xlr_IboOz9jpn98Lt7sc4Et6Dv3Hs0UXkABe2Z5ygiR23MT8aZxd_fV5Vxl7SvyH3YDVul3xcY",
+		"VAPID_SUBJECT": "mailto:asher@winstead.family"
+	},
+	"triggers": {
+		"crons": ["*/10 * * * *"]
 	},
 	"d1_databases": [
 		{

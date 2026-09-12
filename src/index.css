@@ -634,6 +634,19 @@ html[data-backdrop="photo"] .brand h1 {
   text-shadow: 0 1px 2px var(--bg), 0 10px 28px color-mix(in srgb, var(--bg) 80%, transparent);
 }
 .chip:disabled { opacity: 0.55; cursor: wait; }
+.chip.locked,
+.chip.locked:disabled {
+  opacity: 1;
+  cursor: default;
+}
+.notify-note { margin: 6px 0 0; }
+.notify-steps {
+  margin: 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 6px;
+  color: var(--muted);
+}
 .chip.announce-toggle {
   border: 1px solid color-mix(in srgb, var(--accent) 28%, transparent);
   background: color-mix(in srgb, var(--pane) var(--glass-fill), transparent);

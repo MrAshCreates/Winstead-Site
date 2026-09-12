@@ -19,6 +19,23 @@ export type BackdropStyle = "orbs" | "linen" | "dots" | "diamonds" | "waves" | "
 export type PostKind = "update" | "announcement";
 export type ReminderAudience = "self" | "family";
 export type ChangeAction = "create" | "update" | "delete";
+export type NoticeKind = "announcement" | "reminder" | "update" | "comment" | "recipe" | "gallery" | "directory";
+
+export type NotificationPrefs = {
+	updates: boolean;
+	comments: boolean;
+	recipes: boolean;
+	gallery: boolean;
+	directory: boolean;
+};
+
+export type NotificationStatus = {
+	configured: boolean;
+	vapidPublicKey: string | null;
+	subscribed: boolean;
+	preferences: NotificationPrefs;
+	alwaysOn: Array<"announcement" | "reminder">;
+};
 
 export type Preferences = {
 	mode: ThemeMode;
@@ -215,6 +232,22 @@ export type MeResponse =
 
 export const GLASS_MIN = 15;
 export const GLASS_MAX = 90;
+
+export const DEFAULT_NOTIFICATION_PREFS: NotificationPrefs = {
+	updates: true,
+	comments: true,
+	recipes: true,
+	gallery: true,
+	directory: false,
+};
+
+export const OPTIONAL_NOTICE_KINDS: { id: keyof NotificationPrefs; label: string; note: string }[] = [
+	{ id: "updates", label: "Life updates", note: "Everyday posts in the family feed" },
+	{ id: "comments", label: "Comments", note: "When someone replies on your post" },
+	{ id: "recipes", label: "Recipes", note: "New dishes in the recipe book" },
+	{ id: "gallery", label: "Gallery", note: "New photos from the family" },
+	{ id: "directory", label: "Directory", note: "New phone-book contacts" },
+];
 
 export const DEFAULT_PREFERENCES: Preferences = {
 	mode: "system",

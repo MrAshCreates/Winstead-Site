@@ -11,6 +11,7 @@ import {
 import { AVATAR_STYLES, BACKDROP_STYLES, DEFAULT_PREFERENCES, GLASS_MAX, GLASS_MIN, type MeResponse, type Member, type Preferences, type SiteSettings } from "../shared/types";
 import { api } from "./api";
 import { applyTheme } from "./theme";
+import { registerPushWorker } from "./push";
 
 type AuthValue = {
 	status: "loading" | MeResponse["status"];
@@ -101,6 +102,11 @@ export function AppProviders({ children }: { children: ReactNode }) {
 		const timer = window.setTimeout(() => setToast(null), 2800);
 		return () => window.clearTimeout(timer);
 	}, [toast]);
+
+	useEffect(() => {
+		if (status !== "ok") return;
+		void registerPushWorker();
+	}, [status]);
 
 	const setPreferences = useCallback(
 		async (next: Partial<Preferences>) => {

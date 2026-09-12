@@ -3,6 +3,7 @@ import { HTTPException } from "hono/http-exception";
 import {
 	AVATAR_STYLES,
 	type AvatarStyle,
+	type NotificationPrefs,
 	type PostKind,
 	type Preferences,
 	type ReminderAudience,
@@ -50,6 +51,19 @@ import {
 	toMember,
 	type UserRow,
 } from "./store";
+import {
+	actorLabel,
+	dispatchNotice,
+	getNotificationPrefs,
+	listUserSubscriptions,
+	notifyDueReminders,
+	removePushSubscription,
+	saveNotificationPrefs,
+	snippet,
+	upsertPushSubscription,
+	userHasSubscription,
+} from "./notify";
+import { enqueueNotify, sendToSubscriptions, vapidKeys, vapidPublicKey } from "./push";
 
 type AppEnv = {
 	Bindings: Env;
@@ -115,6 +129,20 @@ function currentUser(c: { get: (key: "user") => UserRow | null }): UserRow {
 	const user = c.get("user");
 	if (!user?.onboarded) throw new HTTPException(403, { message: "Profile required" });
 	return user;
+}
+
+function asBool(value: unknown, fallback: boolean): boolean {
+	if (typeof value === "boolean") return value;
+	if (value === 0 || value === "0" || value === "false") return false;
+	if (value === 1 || value === "1" || value === "true") return true;
+	return fallback;
+}
+
+function queueNotice(
+	c: { executionCtx: { waitUntil: (promise: Promise<unknown>) => void }; env: Env },
+	notice: Parameters<typeof dispatchNotice>[1],
+) {
+	enqueueNotify(c.executionCtx, dispatchNotice(c.env, notice));
 }
 
 function currentIdentity(c: { get: (key: "identity") => AccessIdentity | null }): AccessIdentity {
@@ -425,6 +453,15 @@ app.post("/api/posts", async (c) => {
 		after: row,
 		actorId: user.id,
 	});
+	const name = actorLabel(user);
+	queueNotice(c, {
+		kind: kind === "announcement" ? "announcement" : "update",
+		omitUserId: user.id,
+		title: kind === "announcement" ? "Family announcement" : `${name} posted`,
+		body: snippet(`${name}: ${text}`),
+		url: `/life/${row.id}`,
+		tag: `post-${row.id}`,
+	});
 	return c.json({ post: await getPost(c.env.DB, user.id, row.id) }, 201);
 });
 
@@ -482,7 +519,9 @@ app.delete("/api/posts/:id", async (c) => {
 
 app.post("/api/posts/:id/comments", async (c) => {
 	const user = currentUser(c);
-	const post = await c.env.DB.prepare("SELECT id FROM posts WHERE id = ? AND deleted_at IS NULL").bind(c.req.param("id")).first();
+	const post = await c.env.DB.prepare("SELECT id, author_id FROM posts WHERE id = ? AND deleted_at IS NULL")
+		.bind(c.req.param("id"))
+		.first<{ id: string; author_id: string }>();
 	if (!post) return c.json({ error: "Post not found" }, 404);
 	const body = await c.req.json<{ body?: string }>();
 	const text = asString(body.body);
@@ -506,6 +545,18 @@ app.post("/api/posts/:id/comments", async (c) => {
 		after: row,
 		actorId: user.id,
 	});
+	if (post.author_id !== user.id) {
+		const name = actorLabel(user);
+		queueNotice(c, {
+			kind: "comment",
+			omitUserId: user.id,
+			userIds: [post.author_id],
+			title: `${name} commented`,
+			body: snippet(text),
+			url: `/life/${row.post_id}`,
+			tag: `comment-${row.id}`,
+		});
+	}
 	return c.json({ comments: await listComments(c.env.DB, row.post_id) }, 201);
 });
 
@@ -581,6 +632,21 @@ app.post("/api/reminders", async (c) => {
 		after: row,
 		actorId: user.id,
 	});
+	if (row.audience === "family") {
+		const dueMs = row.due_at ? Date.parse(row.due_at) : Number.NaN;
+		if (Number.isFinite(dueMs) && dueMs <= Date.now()) {
+			await c.env.DB.prepare("UPDATE reminders SET notified_at = ? WHERE id = ?").bind(nowIso(), row.id).run();
+		}
+		const name = actorLabel(user);
+		queueNotice(c, {
+			kind: "reminder",
+			omitUserId: user.id,
+			title: "Family reminder",
+			body: snippet(`${name}: ${row.title}`),
+			url: "/life",
+			tag: `reminder-${row.id}`,
+		});
+	}
 	return c.json({ reminders: await listReminders(c.env.DB, user.id) }, 201);
 });
 
@@ -680,6 +746,14 @@ app.post("/api/recipes", async (c) => {
 		before: null,
 		after: row,
 		actorId: user.id,
+	});
+	queueNotice(c, {
+		kind: "recipe",
+		omitUserId: user.id,
+		title: "New recipe",
+		body: snippet(`${actorLabel(user)} added ${title}`),
+		url: `/recipes/${row.id}`,
+		tag: `recipe-${row.id}`,
 	});
 	return c.json({ recipe: await getRecipe(c.env.DB, row.id) }, 201);
 });
@@ -804,6 +878,14 @@ app.post("/api/contacts", async (c) => {
 		after: row,
 		actorId: user.id,
 	});
+	queueNotice(c, {
+		kind: "directory",
+		omitUserId: user.id,
+		title: "Directory",
+		body: snippet(`${actorLabel(user)} added ${row.display_name}`),
+		url: "/directory",
+		tag: `contact-${row.id}`,
+	});
 	return c.json({ contact: toContact(row), contacts: await listContacts(c.env.DB) }, 201);
 });
 
@@ -911,6 +993,14 @@ app.post("/api/gallery", async (c) => {
 		before: null,
 		after: row,
 		actorId: user.id,
+	});
+	queueNotice(c, {
+		kind: "gallery",
+		omitUserId: user.id,
+		title: "New photo",
+		body: snippet(`${actorLabel(user)} added a photo${row.title ? `: ${row.title}` : ""}`),
+		url: "/gallery",
+		tag: `gallery-${row.id}`,
 	});
 	return c.json({ items: await listGallery(c.env.DB) }, 201);
 });
@@ -1114,6 +1204,84 @@ app.delete("/api/admin/:type/:id", async (c) => {
 	return c.json({ ok: true });
 });
 
+app.get("/api/notifications", async (c) => {
+	const user = currentUser(c);
+	return c.json({
+		configured: Boolean(vapidKeys(c.env)),
+		vapidPublicKey: vapidPublicKey(c.env) || null,
+		subscribed: await userHasSubscription(c.env.DB, user.id),
+		preferences: await getNotificationPrefs(c.env.DB, user.id),
+		alwaysOn: ["announcement", "reminder"],
+	});
+});
+
+app.patch("/api/notifications/preferences", async (c) => {
+	const user = currentUser(c);
+	const body = await c.req.json<Partial<NotificationPrefs>>();
+	const current = await getNotificationPrefs(c.env.DB, user.id);
+	const next = await saveNotificationPrefs(c.env.DB, user.id, {
+		updates: asBool(body.updates, current.updates),
+		comments: asBool(body.comments, current.comments),
+		recipes: asBool(body.recipes, current.recipes),
+		gallery: asBool(body.gallery, current.gallery),
+		directory: asBool(body.directory, current.directory),
+	});
+	return c.json({ preferences: next });
+});
+
+app.post("/api/notifications/subscribe", async (c) => {
+	const user = currentUser(c);
+	if (!vapidKeys(c.env)) return c.json({ error: "Notifications aren't set up on the house yet" }, 503);
+	const body = await c.req.json<{ endpoint?: string; keys?: { p256dh?: string; auth?: string } }>();
+	const endpoint = asString(body.endpoint);
+	const p256dh = asString(body.keys?.p256dh);
+	const auth = asString(body.keys?.auth);
+	if (!endpoint.startsWith("https://") || !p256dh || !auth) {
+		return c.json({ error: "That device could not be registered" }, 400);
+	}
+	await upsertPushSubscription(c.env.DB, user.id, {
+		endpoint,
+		p256dh,
+		auth,
+		userAgent: c.req.header("user-agent") || "",
+	});
+	return c.json({
+		ok: true,
+		subscribed: true,
+		preferences: await getNotificationPrefs(c.env.DB, user.id),
+	});
+});
+
+app.post("/api/notifications/unsubscribe", async (c) => {
+	const user = currentUser(c);
+	const body = await c.req.json<{ endpoint?: string }>();
+	const endpoint = asString(body.endpoint);
+	if (endpoint) await removePushSubscription(c.env.DB, user.id, endpoint);
+	return c.json({ ok: true, subscribed: await userHasSubscription(c.env.DB, user.id) });
+});
+
+app.post("/api/notifications/test", async (c) => {
+	const user = currentUser(c);
+	if (!vapidKeys(c.env)) return c.json({ error: "Notifications aren't set up on the house yet" }, 503);
+	const subscriptions = await listUserSubscriptions(c.env.DB, user.id);
+	if (subscriptions.length === 0) return c.json({ error: "Turn on alerts first, from the Home Screen app" }, 400);
+	enqueueNotify(
+		c.executionCtx,
+		sendToSubscriptions(
+			c.env,
+			subscriptions,
+			{
+				title: "Winstead",
+				body: "This is a test ping from the house.",
+				url: "/settings",
+				tag: "winstead-test",
+			},
+			"high",
+		),
+	);
+	return c.json({ ok: true });
+});
+
 app.notFound((c) => {
 	if (c.req.path.startsWith("/api/")) return c.json({ error: "Not found" }, 404);
 	return c.body(null, 404);
@@ -1122,5 +1290,8 @@ app.notFound((c) => {
 export default {
 	fetch(request, env, ctx) {
 		return app.fetch(request, env, ctx);
+	},
+	scheduled(_event, env, ctx) {
+		ctx.waitUntil(notifyDueReminders(env));
 	},
 } satisfies ExportedHandler<Env>;

@@ -6,3 +6,6 @@ ALLOWED_EMAIL_DOMAIN=winstead.family
 BOOTSTRAP_ADMIN_EMAIL=asher@winstead.family
 TEAM_DOMAIN=
 POLICY_AUD=
+VAPID_PUBLIC_KEY=
+VAPID_PRIVATE_KEY=
+VAPID_SUBJECT=mailto:asher@winstead.family

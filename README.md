@@ -7,7 +7,7 @@ A private family home at [winstead.family](https://winstead.family): Cloudflare 
 - Cloudflare Access email codes (one hour) for any `@winstead.family` inbox
 - First visit creates a profile; returning visits sign you in automatically
 - `asher@winstead.family` is the first admin
-- Home, life updates, gallery, recipe book, directory, reminders, appearance settings
+- Home, life updates, gallery, recipe book, directory, reminders, appearance settings, and Home Screen push alerts
 - Admins can edit the house copy, promote people, migrate login emails, hard-delete content, and revert changes for 24 hours
 - Everyone can add recipes, directory entries, and gallery photos; people manage their own posts
 
@@ -57,6 +57,25 @@ Set Access keys in the Worker **Settings → Variables** (do not put them in `wr
 | `POLICY_AUD` | Access application AUD |
 | `ALLOWED_EMAIL_DOMAIN` | `winstead.family` |
 | `BOOTSTRAP_ADMIN_EMAIL` | `asher@winstead.family` |
+| `VAPID_PUBLIC_KEY` | Public Web Push key (already in `wrangler.jsonc`) |
+
+Also set a Worker **secret** (not a plaintext variable):
+
+```bash
+npx wrangler secret put VAPID_PRIVATE_KEY
+```
+
+Use the matching private key from `npx web-push generate-vapid-keys`. Local preview reads it from `.dev.vars`. Changing VAPID keys invalidates every device subscription.
+
+After deploy, apply the notifications migration:
+
+```bash
+npx wrangler d1 migrations apply winstead-family --remote
+```
+
+## Home Screen alerts (iPhone / iPad)
+
+Web Push on iOS only works after **Add to Home Screen** (Safari → Share → Add to Home Screen), then opening the Winstead icon. Safari tabs cannot receive these alerts. Announcements and reminders always notify; life updates, comments, recipes, gallery, and directory can be toggled under Settings → You. Due reminders are checked about every ten minutes.
 
 The Worker verifies the Access JWT (`Cf-Access-Jwt-Assertion` or the `CF_Authorization` cookie) on every `/api/*` request. Do not trust the email header alone.
 

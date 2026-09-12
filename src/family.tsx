@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useMatch, useNavigate, useParams } from "react-router-dom";
-import type { ChangeLogEntry, ExtraContact, GalleryItem, Member, Recipe, Reminder, Role } from "../shared/types";
-import { COLOR_SCHEMES, FONT_CHOICES, AVATAR_STYLES, BACKDROP_STYLES, type AvatarStyle } from "../shared/types";
+import type { ChangeLogEntry, ExtraContact, GalleryItem, Member, NotificationPrefs, NotificationStatus, Recipe, Reminder, Role } from "../shared/types";
+import { COLOR_SCHEMES, FONT_CHOICES, AVATAR_STYLES, BACKDROP_STYLES, OPTIONAL_NOTICE_KINDS, type AvatarStyle } from "../shared/types";
 import { api, uploadMany } from "./api";
 import { useAuth, useTheme, useToast } from "./context";
+import { disablePush, enablePush, isIosDevice, isStandaloneDisplay, pushSupported, syncPushSubscription } from "./push";
 import { AppGrid, Composer, PostCard, usePosts } from "./pages";
 import { Icons } from "./icons";
 import { GLASS_MAX, GLASS_MIN, mediaPath } from "./theme";
@@ -831,6 +832,171 @@ function bookLines(contact: ExtraContact): LabeledLine[] {
 	];
 }
 
+function NotificationsCard() {
+	const toast = useToast();
+	const [status, setStatus] = useState<NotificationStatus | null>(null);
+	const [busy, setBusy] = useState(false);
+	const [permission, setPermission] = useState(() =>
+		typeof Notification === "undefined" ? "default" : Notification.permission,
+	);
+	const ios = isIosDevice();
+	const standalone = isStandaloneDisplay();
+	const supported = pushSupported();
+
+	const refresh = async () => {
+		const next = await api.notifications();
+		setStatus(next);
+		if (typeof Notification !== "undefined") setPermission(Notification.permission);
+		if (next.configured && next.vapidPublicKey && typeof Notification !== "undefined" && Notification.permission === "granted") {
+			try {
+				await syncPushSubscription(next.vapidPublicKey);
+				setStatus(await api.notifications());
+			} catch {
+				/* keep the saved server state */
+			}
+		}
+	};
+
+	useEffect(() => {
+		void refresh().catch((err) => {
+			toast(err instanceof Error ? err.message : "Could not load alerts");
+		});
+	}, []);
+
+	const togglePref = async (id: keyof NotificationPrefs) => {
+		if (!status) return;
+		const next = { ...status.preferences, [id]: !status.preferences[id] };
+		setStatus({ ...status, preferences: next });
+		try {
+			const saved = await api.saveNotificationPrefs({ [id]: next[id] });
+			setStatus((current) => (current ? { ...current, preferences: saved.preferences } : current));
+		} catch (err) {
+			await refresh();
+			toast(err instanceof Error ? err.message : "Could not save alert settings");
+		}
+	};
+
+	const onEnable = async () => {
+		if (!status?.vapidPublicKey) return;
+		setBusy(true);
+		try {
+			await enablePush(status.vapidPublicKey);
+			await refresh();
+			toast("Alerts are on for this device");
+		} catch (err) {
+			toast(err instanceof Error ? err.message : "Could not turn on alerts");
+			if (typeof Notification !== "undefined") setPermission(Notification.permission);
+		} finally {
+			setBusy(false);
+		}
+	};
+
+	const onDisable = async () => {
+		setBusy(true);
+		try {
+			await disablePush();
+			await refresh();
+			toast("This device will stay quiet");
+		} catch (err) {
+			toast(err instanceof Error ? err.message : "Could not turn off alerts");
+		} finally {
+			setBusy(false);
+		}
+	};
+
+	const onTest = async () => {
+		setBusy(true);
+		try {
+			await api.pushTest();
+			toast("Test ping sent");
+		} catch (err) {
+			toast(err instanceof Error ? err.message : "Could not send a test ping");
+		} finally {
+			setBusy(false);
+		}
+	};
+
+	const needsHomeScreen = ios && !standalone;
+	const blocked = permission === "denied";
+	const canEnable = Boolean(status?.configured && status.vapidPublicKey && supported && !needsHomeScreen && !blocked);
+	const subscribed = Boolean(status?.subscribed);
+
+	return (
+		<Glass className="panel stack notify-panel">
+			<div>
+				<h3>Notifications</h3>
+				<p className="muted notify-note">
+					iPhone and iPad only get these after you add Winstead to the Home Screen and open it from there.
+				</p>
+			</div>
+			{needsHomeScreen ? (
+				<ol className="notify-steps">
+					<li>In Safari, tap Share.</li>
+					<li>Tap Add to Home Screen.</li>
+					<li>Open the Winstead icon, then come back here and turn on alerts.</li>
+				</ol>
+			) : null}
+			{!supported && !needsHomeScreen ? (
+				<p className="muted notify-note">This browser cannot receive push alerts. Use the Home Screen app on iOS, or Safari / Chrome on a computer.</p>
+			) : null}
+			{status && !status.configured ? (
+				<p className="muted notify-note">Alerts are not wired on the server yet. An admin needs to set the VAPID keys.</p>
+			) : null}
+			{blocked ? (
+				<p className="muted notify-note">
+					Notifications are blocked. On iPhone: Settings → Notifications → Winstead → Allow Notifications.
+				</p>
+			) : null}
+			<div className="actions">
+				{subscribed ? (
+					<>
+						<button className="chip on locked" type="button" disabled>
+							Alerts on
+						</button>
+						<button className="btn-ghost" type="button" disabled={busy} onClick={() => void onTest()}>
+							Send a test ping
+						</button>
+						<button className="btn-ghost" type="button" disabled={busy} onClick={() => void onDisable()}>
+							Turn off this device
+						</button>
+					</>
+				) : (
+					<button className="btn" type="button" disabled={busy || !canEnable} onClick={() => void onEnable()}>
+						{needsHomeScreen ? "Open from Home Screen first" : "Enable alerts"}
+					</button>
+				)}
+			</div>
+			<p className="muted" style={{ margin: "8px 0 0" }}>
+				Always on
+			</p>
+			<div className="actions">
+				<button className="chip on locked" type="button" disabled>
+					Announcements
+				</button>
+				<button className="chip on locked" type="button" disabled>
+					Reminders
+				</button>
+			</div>
+			<p className="muted" style={{ margin: "8px 0 0" }}>
+				You can turn these off
+			</p>
+			<div className="actions">
+				{OPTIONAL_NOTICE_KINDS.map((kind) => (
+					<button
+						key={kind.id}
+						className={`chip ${status?.preferences[kind.id] ? "on" : ""}`}
+						type="button"
+						title={kind.note}
+						onClick={() => void togglePref(kind.id)}
+					>
+						{kind.label}
+					</button>
+				))}
+			</div>
+		</Glass>
+	);
+}
+
 export function SettingsPage() {
 	const { user, refresh, logout } = useAuth();
 	const { preferences, setPreferences } = useTheme();
@@ -914,6 +1080,7 @@ export function SettingsPage() {
 						Sign out of local preview
 					</button>
 				</Glass>
+				<NotificationsCard />
 			</div>
 			<Glass className="panel stack">
 				<h3>Look and feel</h3>
